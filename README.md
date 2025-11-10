@@ -4,22 +4,16 @@ This repository demonstrates how to automate the deployment of products and prod
 
 [![Docs-As-Code-Automation-APIHub](https://img.youtube.com/vi/7D5bbaj60Cc/0.jpg)](https://www.youtube.com/watch?v=7D5bbaj60Cc)
 
-This bootstrapped repository is setup with 3 sample products which will be deployed and optionally auto-published.
+## Overview
 
-- A sample "_Adopt a Pet_" product exists in this [folder](./products/Adopt-a-Pet/)
-- A sample "_SwaggerHub Portal APIs_" product exists in this [folder](./products/SwaggerHub%20Portal%20APIs/)
-- A sample "_Zephyr Squad APIs_" product exists in this [folder](./products/Zephyr%20Squad%20APIs/)
-
- Each product has varying number of pages, images, content nesting etc.
+This repository provides a **docs-as-code** approach to managing your SwaggerHub Portal products and content. By structuring your product documentation, images, and metadata in a specific folder and file structure, you can leverage automated processes (via GitHub Actions) to deploy and publish this content to your SwaggerHub Portal instance.
 
 ## Getting Started
 
 To leverage this automation process for your own SwaggerHub Portal, the recommended process is as follows:
 
-- Fork this repo to your local GitHub profile/organization
 - Create the appropriate folders and content underneath the [products folder](./products/) following the [conventions](#conventions) laid out below.
 - Setup the required repository secrets, environment(s), and environment variables needed by the configured [GitHub Actions](#github-actions).
-- Delete the boilerplate products folders: "_Adopt a Pet_",  "_SwaggerHub Portal APIs_", and "_Zephyr Squad APIs_".
 - Run the GitHub Actions to validate and publish your content.
 
 ## Conventions
@@ -287,7 +281,6 @@ The `productMetadata` defines the following properties:
 | autoPublish | This property determines whether the product should be automatically published after deployment or not. If set to true, the product will be published automatically. If set to false, the product will not be published automatically. |
 | validateAPIs | This property determines whether API standardization rules should be ran against the API to determine conformance with organizational rules. |
 
-
 The `contentMetadata` defines the following properties:
 
 | Property | Description |
@@ -301,36 +294,55 @@ The `contentMetadata` defines the following properties:
 
 ## GitHub Actions
 
-This repo comes with a simple boilerplate action that can be triggered manually or upon merge into the `main` branch.
+This repository provides a **reusable GitHub Action** for automating the deployment and publishing of products and content to a SwaggerHub Portal instance.
 
-The action requires the following **repository secrets** to be configured:
+### Usage
 
-- `SWAGGERHUB-API-KEY` - an API key associated to a user with the appropriate permission to be able to publish Portal content. See [Portal User Management](https://support.smartbear.com/swaggerhub-portal/docs/en/user-management.html) for more info.
+You can use this action in your workflows by referencing `smartbear-devrel/SwaggerHub-Portal-Management@main`.
 
-The action requires the following **repository environment** to be configured:
+Example:
 
-- `Production` - the default environment. Feel free to configure additional environment and adjust the action as required if applicable for your use case.
+```yaml
+jobs:
+    publish-portal-content:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout repository
+                uses: actions/checkout@v4
+            - name: Publish to SwaggerHub Portal
+                uses: smartbear-devrel/SwaggerHub-Portal-Management@main
+                with:
+                    swaggerhub-api-key: ${{ secrets.SWAGGERHUB_API_KEY }}
+                    swaggerhub-portal-subdomain: ${{ secrets.SWAGGERHUB_PORTAL_SUBDOMAIN }}
+                    swaggerhub-org-name: ${{ secrets.SWAGGERHUB_ORG_NAME }}
+                    log-level: '2'
+                    publish: true
+```
 
-The action requires the following **repository environment variables** to be configured:
+#### Inputs
 
-- `SWAGGERHUB_PORTAL_SUBDOMAIN` - the sub-domain used by your portal
-- `SWAGGERHUB_ORG_NAME` - the SwaggerHub organization housing the APIs and standardization rules
+| Name                      | Description                                                                 | Required | Example                        |
+|---------------------------|-----------------------------------------------------------------------------|----------|--------------------------------|
+| swaggerhub-api-key        | SwaggerHub API Key with permissions to publish Portal content                | Yes      | ${{ secrets.SWAGGERHUB_API_KEY }} |
+| swaggerhub-portal-subdomain | SwaggerHub Portal subdomain (e.g. mycompany for mycompany.portal.swaggerhub.com) | Yes      | mycompany                      |
+| swaggerhub-org-name       | SwaggerHub organization name                                                | Yes      | my-org                         |
+| log-level                 | Log level for script output (1=DEBUG, 2=INFO, 3=WARNING, 4=ERROR)           | No       | 2                              |
+| publish                   | Whether to publish the products after deployment (true/false)                | No       | true                           |
+| skip-api-linting         | Whether to skip API standardization linting (true/false)                    | No       | false                          |
+| skip-spell-check         | Whether to skip spell checking (true/false)                                 | No       | false                          |
+| product-folder            | Path to the products folder                                                 | No       | ./products                     |
+| custom-words-file         | Path to the custom words file for spell checking                            | No       | ./custom-words.txt             |
 
-### Docs as Code PR Commit Validation Action
+#### Requirements
 
-This action runs on every commit and every PR to validate the contents and structure of the content to be published to the portal
+- The action requires the following **repository secrets** to be configured:
+  - `SWAGGERHUB_API_KEY` - an API key associated to a user with the appropriate permission to be able to publish Portal content. See [Portal User Management](https://support.smartbear.com/swaggerhub-portal/docs/en/user-management.html) for more info.
+  - `SWAGGERHUB_PORTAL_SUBDOMAIN` - the sub-domain used by your portal
+  - `SWAGGERHUB_ORG_NAME` - the SwaggerHub organization housing the APIs and standardization rules
 
-The action performs the following jobs:
+### What the Action Does
 
-1. `spell-check`: Performs spell checking on all of the markdown files under the _products_ folder (**note** to add a list of known good custom words update the ./custom-words.txt file)
-2. `validate-manifests`: Performs a JSON Schema validation check against the defined product manifest.json files to ensure they are correctly specified.
-3. `lint-api`: Performs API standardization checks against each API referenced by a product manifest.json file. There is the ability to skip API validation for a specific API product via the productMetadata in the manifest.json.
-
-### Docs as Code Action
-
-This action runs on upon merging into `main`. It performs all the checks as per above and assuming all validations pass, it then runs then publishes the content to the appropriate SwaggerHub Portal instance.
-
-The action performs the following jobs:
+This action will:
 
 1. `spell-check`: Performs spell checking on all of the markdown files under the _products_ folder (**note** to add a list of known good custom words update the ./custom-words.txt file)
 2. `validate-manifests`: Performs a JSON Schema validation check against the defined product manifest.json files to ensure they are correctly specified.

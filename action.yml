@@ -1,0 +1,185 @@
+name: 'SwaggerHub Portal Management'
+description: 'Automate deployment, validation, and publishing of products and content to a SwaggerHub Portal instance.'
+author: 'SmartBear DevRel <devrel@smartbear.com>'
+branding:
+  icon: 'upload-cloud'
+  color: 'blue'
+
+inputs:
+  swaggerhub-api-key:
+    description: 'SwaggerHub API Key with permissions to publish Portal content.'
+    required: true
+  swaggerhub-portal-subdomain:
+    description: 'SwaggerHub Portal subdomain (e.g. mycompany for mycompany.portal.swaggerhub.com)'
+    required: true
+  swaggerhub-org-name:
+    description: 'SwaggerHub organization name.'
+    required: true
+  log-level:
+    description: 'Log level for script output (1=DEBUG, 2=INFO, 3=WARNING, 4=ERROR)'
+    required: false
+    default: '2'
+  skip-spell-check:
+    description: 'Skip the spell check step.'
+    required: false
+    default: 'false'
+  skip-api-linting:
+    description: 'Skip the API linting step.'
+    required: false
+    default: 'false'
+  publish:
+    description: 'Publish the content to SwaggerHub Portal.'
+    required: false
+    default: 'false'
+  product-folder:
+    description: 'Path to the products folder.'
+    required: false
+    default: './products'
+  custom-words-file:
+    description: 'Path to the custom words file for spell checking.'
+    required: false
+    default: './custom-words.txt'  
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up jq
+      uses: dcarbone/install-jq-action@v2.1.0
+
+    - name: Set up file utility (macOS/Linux)
+      shell: bash
+      run: |
+        set -e
+        if ! command -v file >/dev/null; then
+          sudo apt-get update && sudo apt-get install -y file
+        fi
+
+    - name: Set up environment variables
+      shell: bash
+      run: |
+        set -e
+        echo "SWAGGERHUB_API_KEY=${{ inputs.swaggerhub-api-key }}" >> $GITHUB_ENV
+        echo "SWAGGERHUB_PORTAL_SUBDOMAIN=${{ inputs.swaggerhub-portal-subdomain }}" >> $GITHUB_ENV
+        echo "SWAGGERHUB_ORG_NAME=${{ inputs.swaggerhub-org-name }}" >> $GITHUB_ENV
+        echo "LOG_LEVEL=${{ inputs.log-level }}" >> $GITHUB_ENV
+
+    - name: validate inputs
+      shell: bash
+      run: |
+        set -e
+        if [ ! -d "${{ inputs.product-folder }}" ]; then
+          echo "Product folder not found: ${{ inputs.product-folder }}"
+          exit 1
+        fi
+        if [ ! -f "${{ inputs.custom-words-file }}" ]; then
+          echo "Custom words file not found: ${{ inputs.custom-words-file }}"
+          exit 1
+        fi
+
+    - name: Spell check markdown files
+      if: ${{ inputs.skip-spell-check != 'true' }}
+      shell: bash
+      run: |
+        set -e
+        npm install -g cspell
+        # If a custom words file is specified, update the cspell config to point to it
+        if [ -n "${{ inputs.custom-words-file }}" ]; then
+          echo "Using custom words file: ${{ inputs.custom-words-file }}"
+          if [ ! -f "${{ inputs.custom-words-file }}" ]; then
+            echo "Custom words file not found: ${{ inputs.custom-words-file }}"
+            exit 1
+          fi
+
+          jq --arg path "${{ inputs.custom-words-file }}" '
+            .dictionaryDefinitions = (.dictionaryDefinitions | map(
+              if .name == "custom-words" then .path = $path else . end
+            ))
+          ' ./.cspell.json > ./.cspell.tmp.json
+          mv ./.cspell.tmp.json ./.cspell.json
+        fi
+        cspell --config ./.cspell.json "${{ inputs.product-folder }}/**/*.md"
+
+    - name: Validate product manifests
+      shell: bash
+      run: |
+        set -e
+        npm install -g ajv-cli
+        . ./scripts/utilities.sh
+        for product in ${{ inputs.product-folder }}/*; do
+          if [[ -d "$product" ]]; then
+            product_name=${product#${{ inputs.product-folder }}/}
+            manifest="${{ inputs.product-folder }}/$product_name/manifest.json"
+            if [[ -f "$manifest" ]]; then
+              log_message $INFO "Validating manifest in product: $product_name"
+              log_message $DEBUG "Validating manifest: $manifest"
+              ajv validate -s ./schemas/manifest.schema.json -d "$manifest" --spec=draft2020
+            fi
+          fi
+        done
+
+    - name: Lint APIs in manifests
+      if: ${{ inputs.skip-api-linting != 'true' }}
+      shell: bash
+      run: |
+        set -e
+        npm install -g swaggerhub-cli
+        . ./scripts/utilities.sh
+        for product in ${{ inputs.product-folder }}/*; do
+          if [[ -d "$product" ]]; then
+            product_name=${product#${{ inputs.product-folder }}/}
+            manifest="${{ inputs.product-folder }}/$product_name/manifest.json"
+            if [[ -f "$manifest" ]]; then
+              validateAPIs=$(jq -r '.productMetadata.validateAPIs' "$manifest")
+              if [[ "$validateAPIs" == "true" ]]; then
+                log_message $INFO "Validating APIs for product: $product_name"
+                contentMetadata=$(jq -c '.contentMetadata[] | select(.type | ascii_downcase == "apiurl")' "$manifest")
+                echo "$contentMetadata" | jq -c '.' | while IFS= read -r contentMetadataItem; do
+                  slug=$(echo "$contentMetadataItem" | jq -r '.slug')
+                  log_message $INFO "Validating API: $slug"
+                  swaggerhub api:validate "${SWAGGERHUB_ORG_NAME}/$slug" --fail-on-critical
+                done
+              else
+                log_message $WARNING "API validation is not enabled for product: $product_name"
+              fi
+            fi
+          fi
+        done
+      env:
+        SWAGGERHUB_API_KEY: ${{ env.SWAGGERHUB_API_KEY }}
+        SWAGGERHUB_ORG_NAME: ${{ env.SWAGGERHUB_ORG_NAME }}
+
+    - name: Publish content to SwaggerHub Portal
+      if: ${{ inputs.publish == 'true' }}
+      shell: bash
+      run: |
+        set -e
+        chmod +x ./scripts/publish-portal-content.sh
+        chmod +x ./scripts/utilities.sh
+        export PRODUCTS_FOLDER="${{ inputs.product-folder }}"
+        for product in ${{ inputs.product-folder }}/*; do
+          echo "Product: $product"
+          if [[ -d "$product" ]]; then
+            echo "Product is a directory"
+            product_name=${product#${{ inputs.product-folder }}/}
+            echo "Product name: $product_name"
+            manifest="${{ inputs.product-folder }}/$product_name/manifest.json"
+            echo "Manifest: $manifest"
+            if [[ -f "$manifest" ]]; then
+              echo "Manifest is a file"
+              . ./scripts/publish-portal-content.sh && portal_product_upsert "$manifest" "$product_name"
+              . ./scripts/publish-portal-content.sh && load_and_process_product_manifest_content_metadata "$manifest" "$product_name"
+            else
+              echo "Manifest is not a file"
+            fi
+          else
+            echo "Product is not a directory"
+          fi
+        done
+      env:
+        SWAGGERHUB_API_KEY: ${{ env.SWAGGERHUB_API_KEY }}
+        SWAGGERHUB_PORTAL_SUBDOMAIN: ${{ env.SWAGGERHUB_PORTAL_SUBDOMAIN }}
+        SWAGGERHUB_ORG_NAME: ${{ env.SWAGGERHUB_ORG_NAME }}
+        LOG_LEVEL: ${{ env.LOG_LEVEL }}

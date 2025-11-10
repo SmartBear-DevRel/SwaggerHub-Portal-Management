@@ -38,6 +38,7 @@ function publish_response_check() {
     fi
 
     log_message $INFO "Done publishing."
+    PRODUCTS_FOLDER="${PRODUCTS_FOLDER:-./products}"
   fi
 }
 
@@ -91,7 +92,7 @@ function portal_branding_image_post() {
     fi
 
     # get the Content-Type of the image from the image path if the file exists
-    local full_path="./products/$image_name/$image_path"
+    local full_path="$PRODUCTS_FOLDER/$image_name/$image_path"
 
     if [ -f "$full_path" ]; then
         local content_type=$(file --mime-type -b "$full_path")
@@ -101,7 +102,7 @@ function portal_branding_image_post() {
     fi
 
     local content_type=$(file --mime-type -b "$full_path")
-
+        local full_path="$PRODUCTS_FOLDER/$product_name/images/embedded/$image_filename"
     local response=$(curl -s --request POST \
         --url "$PORTAL_URL/attachments/branding/$portal_id?name=$encoded_param_value" \
         --header "Authorization: Bearer $SWAGGERHUB_API_KEY" \
@@ -137,10 +138,10 @@ function portal_product_doc_image_post() {
         return
     fi
 
-    log_message $INFO "Uploading image for product $product_id from /products/$product_name/images/embedded/$image_filename"
+    log_message $INFO "Uploading image for product $product_id from $PRODUCTS_FOLDER/$product_name/images/embedded/$image_filename"
 
     # get the Content-Type of the image from the image path
-    local full_path="./products/$product_name/images/embedded/$image_filename"
+    local full_path="$PRODUCTS_FOLDER/$product_name/images/embedded/$image_filename"
     local content_type=$(file --mime-type -b "$full_path")
 
     local response=$(curl -s --request POST \
@@ -193,9 +194,9 @@ function portal_product_load_documentation_images() {
 
     log_message $INFO "Loading documentation images for product $product_name ..."
 
-    local images_path="./products/$product_name/images/embedded"
+    local images_path="$PRODUCTS_FOLDER/$product_name/images/embedded"
     if [ ! -d "$images_path" ]; then
-        log_message $WARNING "No images found in $images_path"
+        log_message $WARNING "No images found in $PRODUCTS_FOLDER/$product_name/images/embedded"
         return
     fi
 
@@ -261,9 +262,9 @@ function load_and_process_product_manifest_content_metadata() {
             portal_product_toc_markdown_upsert "$name" "$slug" $order "$product_toc_id" "$type"
             log_message $INFO "Document ID: $document_id"
 
-            local markdown_file="./products/$product_name/$contentUrl"
+            local markdown_file="$PRODUCTS_FOLDER/$product_name/$contentUrl"
             if [ ! -f "$markdown_file" ]; then
-                log_message $ERROR "Markdown/html file not found: $markdown_file"
+                log_message $ERROR "Markdown/html file not found: $PRODUCTS_FOLDER/$product_name/$contentUrl"
                 exit 1
             fi
 
@@ -323,9 +324,9 @@ function load_and_process_product_manifest_content_metadata() {
                 portal_product_toc_markdown_upsert "$child_name" "$child_slug" $child_order "$parent_toc_id" "$child_type"
                 log_message $INFO "Document ID for CHILD: $document_id"
 
-                local child_markdown_file="./products/$product_name/$child_contentUrl"
+                local child_markdown_file="$PRODUCTS_FOLDER/$product_name/$child_contentUrl"
                 if [ ! -f "$child_markdown_file" ]; then
-                    log_message $ERROR "Markdown file not found: $child_markdown_file"
+                    log_message $ERROR "Markdown file not found: $PRODUCTS_FOLDER/$product_name/$child_contentUrl"
                     exit 1
                 fi
 
@@ -848,3 +849,8 @@ portalsResponse=$(curl -s --request GET \
 
 portal_id=$(echo "$portalsResponse" | jq -r '.items[0].id')
 log_message $INFO "Portal ID: $portal_id"
+
+if [ -z "$portal_id" ] || [ "$portal_id" == "null" ]; then
+    log_message $ERROR "Portal with subdomain $PORTAL_SUBDOMAIN not found."
+    exit 1
+fi
