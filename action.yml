@@ -159,8 +159,11 @@ runs:
         chmod +x ./scripts/publish-portal-content.sh
         chmod +x ./scripts/utilities.sh
         export PRODUCTS_FOLDER="${{ inputs.product-folder }}"
+        published_urls=()
+        portal_domain="https://${{ inputs.swaggerhub-portal-subdomain }}.portal.swaggerhub.com"
+
         for product in ${{ inputs.product-folder }}/*; do
-          echo "Product: $product"
+          echo "Processing: $product"
           if [[ -d "$product" ]]; then
             echo "Product is a directory"
             product_name=${product#${{ inputs.product-folder }}/}
@@ -171,6 +174,12 @@ runs:
               echo "Manifest is a file"
               . ./scripts/publish-portal-content.sh && portal_product_upsert "$manifest" "$product_name"
               . ./scripts/publish-portal-content.sh && load_and_process_product_manifest_content_metadata "$manifest" "$product_name"
+              slug=$(jq -r '.productMetadata.slug' "$manifest")
+              if [[ -n "$slug" && "$slug" != "null" ]]; then
+                url="${portal_domain}/${slug}"
+                published_urls+=("$url")
+                echo "Published URL: $url"
+              fi
             else
               echo "Manifest is not a file"
             fi
@@ -178,8 +187,41 @@ runs:
             echo "Product is not a directory"
           fi
         done
+
+        # Output the published URLs as a GitHub Actions output (newline separated)
+        {
+          echo "published-portal-urls<<EOF"
+          for url in "${published_urls[@]}"; do
+            echo "$url"
+          done
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
+
+        # Pretty print the URLs in a table
+        if [[ ${#published_urls[@]} -gt 0 ]]; then
+          printf "\nPublished Portal URLs:\n"
+          printf "%-3s | %-60s\n" "No" "URL"
+          printf -- "----|--------------------------------------------------------------\n"
+          i=1
+          for url in "${published_urls[@]}"; do
+            printf "%-3s | %-60s\n" "$i" "$url"
+            ((i++))
+          done
+        else
+          echo "No portal URLs were published."
+        fi
       env:
         SWAGGERHUB_API_KEY: ${{ env.SWAGGERHUB_API_KEY }}
         SWAGGERHUB_PORTAL_SUBDOMAIN: ${{ env.SWAGGERHUB_PORTAL_SUBDOMAIN }}
         SWAGGERHUB_ORG_NAME: ${{ env.SWAGGERHUB_ORG_NAME }}
         LOG_LEVEL: ${{ env.LOG_LEVEL }}
+
+    - name: Set output for published portal URLs
+      if: ${{ inputs.publish == 'true' }}
+      shell: bash
+      run: |
+        if [[ -n "${{ steps.Publish_content_to_SwaggerHub_Portal.outputs.published-portal-urls }}" ]]; then
+          echo "Published Portal URLs:"
+          echo "${{ steps.Publish_content_to_SwaggerHub_Portal.outputs.published-portal-urls }}"
+        fi
+      id: print-portal-urls
