@@ -152,6 +152,7 @@ runs:
         SWAGGERHUB_ORG_NAME: ${{ env.SWAGGERHUB_ORG_NAME }}
 
     - name: Publish content to SwaggerHub Portal
+      id: publish-to-portal
       if: ${{ inputs.publish == 'true' }}
       shell: bash
       run: |
@@ -215,13 +216,3 @@ runs:
         SWAGGERHUB_PORTAL_SUBDOMAIN: ${{ env.SWAGGERHUB_PORTAL_SUBDOMAIN }}
         SWAGGERHUB_ORG_NAME: ${{ env.SWAGGERHUB_ORG_NAME }}
         LOG_LEVEL: ${{ env.LOG_LEVEL }}
-
-    - name: Set output for published portal URLs
-      if: ${{ inputs.publish == 'true' }}
-      shell: bash
-      run: |
-        if [[ -n "${{ steps.Publish_content_to_SwaggerHub_Portal.outputs.published-portal-urls }}" ]]; then
-          echo "Published Portal URLs:"
-          echo "${{ steps.Publish_content_to_SwaggerHub_Portal.outputs.published-portal-urls }}"
-        fi
-      id: print-portal-urls
