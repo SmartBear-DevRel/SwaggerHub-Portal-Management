@@ -96,17 +96,17 @@ runs:
             .dictionaryDefinitions = (.dictionaryDefinitions | map(
               if .name == "custom-words" then .path = $path else . end
             ))
-          ' ./.cspell.json > ./.cspell.tmp.json
-          mv ./.cspell.tmp.json ./.cspell.json
+          ' $GITHUB_ACTION_PATH/.cspell.json > $GITHUB_ACTION_PATH/.cspell.tmp.json
+          mv $GITHUB_ACTION_PATH/.cspell.tmp.json $GITHUB_ACTION_PATH/.cspell.json
         fi
-        cspell --config ./.cspell.json "${{ inputs.product-folder }}/**/*.md"
+        cspell --config "$GITHUB_ACTION_PATH/.cspell.json" "${{ inputs.product-folder }}/**/*.md"
 
     - name: Validate product manifests
       shell: bash
       run: |
         set -e
         npm install -g ajv-cli
-        . ./scripts/utilities.sh
+        . $GITHUB_ACTION_PATH/scripts/utilities.sh
         for product in ${{ inputs.product-folder }}/*; do
           if [[ -d "$product" ]]; then
             product_name=${product#${{ inputs.product-folder }}/}
@@ -125,7 +125,7 @@ runs:
       run: |
         set -e
         npm install -g swaggerhub-cli
-        . ./scripts/utilities.sh
+        . $GITHUB_ACTION_PATH/scripts/utilities.sh
         for product in ${{ inputs.product-folder }}/*; do
           if [[ -d "$product" ]]; then
             product_name=${product#${{ inputs.product-folder }}/}
@@ -156,8 +156,8 @@ runs:
       shell: bash
       run: |
         set -e
-        chmod +x ./scripts/publish-portal-content.sh
-        chmod +x ./scripts/utilities.sh
+        chmod +x $GITHUB_ACTION_PATH/scripts/publish-portal-content.sh
+        chmod +x $GITHUB_ACTION_PATH/scripts/utilities.sh
         export PRODUCTS_FOLDER="${{ inputs.product-folder }}"
         published_urls=()
         portal_domain="https://${{ inputs.swaggerhub-portal-subdomain }}.portal.swaggerhub.com"
@@ -172,8 +172,8 @@ runs:
             echo "Manifest: $manifest"
             if [[ -f "$manifest" ]]; then
               echo "Manifest is a file"
-              . ./scripts/publish-portal-content.sh && portal_product_upsert "$manifest" "$product_name"
-              . ./scripts/publish-portal-content.sh && load_and_process_product_manifest_content_metadata "$manifest" "$product_name"
+              . $GITHUB_ACTION_PATH/scripts/publish-portal-content.sh && portal_product_upsert "$manifest" "$product_name"
+              . $GITHUB_ACTION_PATH/scripts/publish-portal-content.sh && load_and_process_product_manifest_content_metadata "$manifest" "$product_name"
               slug=$(jq -r '.productMetadata.slug' "$manifest")
               if [[ -n "$slug" && "$slug" != "null" ]]; then
                 url="${portal_domain}/${slug}"
