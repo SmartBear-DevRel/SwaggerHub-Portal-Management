@@ -73,7 +73,7 @@ runs:
           echo "Product folder not found: ${{ inputs.product-folder }}"
           exit 1
         fi
-        if [ ! -f "${{ inputs.custom-words-file }}" ]; then
+        if [ -n "${{ inputs.custom-words-file }}" ] && [ ! -f "${{ inputs.custom-words-file }}" ]; then
           echo "Custom words file not found: ${{ inputs.custom-words-file }}"
           exit 1
         fi
