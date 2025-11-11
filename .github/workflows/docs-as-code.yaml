@@ -49,8 +49,8 @@ jobs:
           swaggerhub-portal-subdomain: ${{ vars.SWAGGERHUB_PORTAL_SUBDOMAIN }}
           swaggerhub-org-name: ${{ vars.SWAGGERHUB_ORG_NAME }}
           log-level: ${{ github.event.inputs.log_level || '2' }}
-          skip-api-linting: ${{ github.event.inputs.skip_api_linting || 'true' }}
-          skip-spell-check: ${{ github.event.inputs.skip_spell_check || 'true' }}
+          skip-api-linting: ${{ github.event.inputs.skip_api_linting || 'false' }}
+          skip-spell-check: ${{ github.event.inputs.skip_spell_check || 'false' }}
           publish: ${{ github.event.inputs.publish || 'true' }}
           product-folder: ${{ github.event.inputs.product-folder || './products' }}
           custom-words-file: ${{ github.event.inputs.custom-words-file || './custom-words.txt' }}

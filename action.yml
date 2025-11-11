@@ -38,7 +38,6 @@ inputs:
   custom-words-file:
     description: 'Path to the custom words file for spell checking.'
     required: false
-    default: './custom-words.txt'  
 
 runs:
   using: 'composite'
