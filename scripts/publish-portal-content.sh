@@ -38,7 +38,7 @@ function publish_response_check() {
     fi
 
     log_message $INFO "Done publishing."
-    PRODUCTS_FOLDER="${PRODUCTS_FOLDER:-./products}"
+    PRODUCTS_FOLDER="${PRODUCTS_FOLDER:-products}"
   fi
 }
 

@@ -34,7 +34,7 @@ inputs:
   product-folder:
     description: 'Path to the products folder.'
     required: false
-    default: './products'
+    default: 'products'
   custom-words-file:
     description: 'Path to the custom words file for spell checking.'
     required: false
@@ -64,17 +64,23 @@ runs:
         echo "SWAGGERHUB_PORTAL_SUBDOMAIN=${{ inputs.swaggerhub-portal-subdomain }}" >> $GITHUB_ENV
         echo "SWAGGERHUB_ORG_NAME=${{ inputs.swaggerhub-org-name }}" >> $GITHUB_ENV
         echo "LOG_LEVEL=${{ inputs.log-level }}" >> $GITHUB_ENV
+        echo "PRODUCTS_FOLDER=${{ github.workspace }}/${{ inputs.product-folder }}" >> $GITHUB_ENV
+        if [ -z "${{ inputs.custom-words-file }}" ]; then
+          echo "CUSTOM_WORDS_FILE=" >> $GITHUB_ENV
+        else
+          echo "CUSTOM_WORDS_FILE=${{ github.workspace }}/${{ inputs.custom-words-file }}" >> $GITHUB_ENV
+        fi
 
     - name: validate inputs
       shell: bash
       run: |
         set -e
-        if [ ! -d "${{ inputs.product-folder }}" ]; then
-          echo "Product folder not found: ${{ inputs.product-folder }}"
+        if [ ! -d "$PRODUCTS_FOLDER" ]; then
+          echo "Product folder not found: $PRODUCTS_FOLDER"
           exit 1
         fi
-        if [ -n "${{ inputs.custom-words-file }}" ] && [ ! -f "${{ inputs.custom-words-file }}" ]; then
-          echo "Custom words file not found: ${{ inputs.custom-words-file }}"
+        if [ -n "$CUSTOM_WORDS_FILE" ] && [ ! -f "$CUSTOM_WORDS_FILE" ]; then
+          echo "Custom words file not found: $CUSTOM_WORDS_FILE"
           exit 1
         fi
 
@@ -85,21 +91,21 @@ runs:
         set -e
         npm install -g cspell
         # If a custom words file is specified, update the cspell config to point to it
-        if [ -n "${{ inputs.custom-words-file }}" ]; then
-          echo "Using custom words file: ${{ inputs.custom-words-file }}"
-          if [ ! -f "${{ inputs.custom-words-file }}" ]; then
-            echo "Custom words file not found: ${{ inputs.custom-words-file }}"
+        if [ -n "$CUSTOM_WORDS_FILE" ]; then
+          echo "Using custom words file: $CUSTOM_WORDS_FILE"
+          if [ ! -f "$CUSTOM_WORDS_FILE" ]; then
+            echo "Custom words file not found: $CUSTOM_WORDS_FILE"
             exit 1
           fi
 
-          jq --arg path "${{ inputs.custom-words-file }}" '
+          jq --arg path "$CUSTOM_WORDS_FILE" '
             .dictionaryDefinitions = (.dictionaryDefinitions | map(
               if .name == "custom-words" then .path = $path else . end
             ))
           ' $GITHUB_ACTION_PATH/.cspell.json > $GITHUB_ACTION_PATH/.cspell.tmp.json
           mv $GITHUB_ACTION_PATH/.cspell.tmp.json $GITHUB_ACTION_PATH/.cspell.json
         fi
-        cspell --config "$GITHUB_ACTION_PATH/.cspell.json" "${{ inputs.product-folder }}/**/*.md"
+        cspell --config "$GITHUB_ACTION_PATH/.cspell.json" "$PRODUCTS_FOLDER/**/*.md"
 
     - name: Validate product manifests
       shell: bash
@@ -107,14 +113,14 @@ runs:
         set -e
         npm install -g ajv-cli
         . $GITHUB_ACTION_PATH/scripts/utilities.sh
-        for product in ${{ inputs.product-folder }}/*; do
+        for product in $PRODUCTS_FOLDER/*; do
           if [[ -d "$product" ]]; then
-            product_name=${product#${{ inputs.product-folder }}/}
-            manifest="${{ inputs.product-folder }}/$product_name/manifest.json"
+            product_name=${product#$PRODUCTS_FOLDER/}
+            manifest="$PRODUCTS_FOLDER/$product_name/manifest.json"
             if [[ -f "$manifest" ]]; then
               log_message $INFO "Validating manifest in product: $product_name"
               log_message $DEBUG "Validating manifest: $manifest"
-              ajv validate -s ./schemas/manifest.schema.json -d "$manifest" --spec=draft2020
+              ajv validate -s $GITHUB_ACTION_PATH/schemas/manifest.schema.json -d "$manifest" --spec=draft2020
             fi
           fi
         done
@@ -126,10 +132,10 @@ runs:
         set -e
         npm install -g swaggerhub-cli
         . $GITHUB_ACTION_PATH/scripts/utilities.sh
-        for product in ${{ inputs.product-folder }}/*; do
+        for product in $PRODUCTS_FOLDER/*; do
           if [[ -d "$product" ]]; then
-            product_name=${product#${{ inputs.product-folder }}/}
-            manifest="${{ inputs.product-folder }}/$product_name/manifest.json"
+            product_name=${product#$PRODUCTS_FOLDER/}
+            manifest="$PRODUCTS_FOLDER/$product_name/manifest.json"
             if [[ -f "$manifest" ]]; then
               validateAPIs=$(jq -r '.productMetadata.validateAPIs' "$manifest")
               if [[ "$validateAPIs" == "true" ]]; then
@@ -158,17 +164,16 @@ runs:
         set -e
         chmod +x $GITHUB_ACTION_PATH/scripts/publish-portal-content.sh
         chmod +x $GITHUB_ACTION_PATH/scripts/utilities.sh
-        export PRODUCTS_FOLDER="${{ inputs.product-folder }}"
         published_urls=()
         portal_domain="https://${{ inputs.swaggerhub-portal-subdomain }}.portal.swaggerhub.com"
 
-        for product in ${{ inputs.product-folder }}/*; do
+        for product in $PRODUCTS_FOLDER/*; do
           echo "Processing: $product"
           if [[ -d "$product" ]]; then
             echo "Product is a directory"
-            product_name=${product#${{ inputs.product-folder }}/}
+            product_name=${product#$PRODUCTS_FOLDER/}
             echo "Product name: $product_name"
-            manifest="${{ inputs.product-folder }}/$product_name/manifest.json"
+            manifest="$PRODUCTS_FOLDER/$product_name/manifest.json"
             echo "Manifest: $manifest"
             if [[ -f "$manifest" ]]; then
               echo "Manifest is a file"

@@ -25,7 +25,7 @@ on:
       product-folder:
         description: 'Path to the products folder.'
         required: false
-        default: './products'
+        default: 'products'
       custom-words-file:
         description: 'Path to the custom words file for spell checking.'
         required: false
@@ -52,5 +52,5 @@ jobs:
           skip-api-linting: ${{ github.event.inputs.skip_api_linting || 'false' }}
           skip-spell-check: ${{ github.event.inputs.skip_spell_check || 'false' }}
           publish: ${{ github.event.inputs.publish || 'true' }}
-          product-folder: ${{ github.event.inputs.product-folder || './products' }}
-          custom-words-file: ${{ github.event.inputs.custom-words-file || './custom-words.txt' }}
+          product-folder: ${{ github.event.inputs.product-folder || 'products' }}
+          # custom-words-file: ${{ github.event.inputs.custom-words-file || './custom-words.txt' }}

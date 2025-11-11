@@ -330,7 +330,7 @@ jobs:
 | publish                   | Whether to publish the products after deployment (true/false)                | No       | true                           |
 | skip-api-linting         | Whether to skip API standardization linting (true/false)                    | No       | false                          |
 | skip-spell-check         | Whether to skip spell checking (true/false)                                 | No       | false                          |
-| product-folder            | Path to the products folder                                                 | No       | ./products                     |
+| product-folder            | Path to the products folder                                                 | No       | products                     |
 | custom-words-file         | Path to the custom words file for spell checking                            | No       | ./custom-words.txt             |
 
 #### Requirements
