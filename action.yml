@@ -84,139 +84,25 @@ runs:
           exit 1
         fi
 
-    - name: Spell check markdown files
-      if: ${{ inputs.skip-spell-check != 'true' }}
+    - name: Run SwaggerHub Portal Management script
       shell: bash
       run: |
         set -e
-        npm install -g cspell
-        # If a custom words file is specified, update the cspell config to point to it
-        if [ -n "$CUSTOM_WORDS_FILE" ]; then
-          echo "Using custom words file: $CUSTOM_WORDS_FILE"
-          if [ ! -f "$CUSTOM_WORDS_FILE" ]; then
-            echo "Custom words file not found: $CUSTOM_WORDS_FILE"
-            exit 1
-          fi
-
-          jq --arg path "$CUSTOM_WORDS_FILE" '
-            .dictionaryDefinitions = (.dictionaryDefinitions | map(
-              if .name == "custom-words" then .path = $path else . end
-            ))
-          ' $GITHUB_ACTION_PATH/.cspell.json > $GITHUB_ACTION_PATH/.cspell.tmp.json
-          mv $GITHUB_ACTION_PATH/.cspell.tmp.json $GITHUB_ACTION_PATH/.cspell.json
-        fi
-        cspell --config "$GITHUB_ACTION_PATH/.cspell.json" "$PRODUCTS_FOLDER/**/*.md"
-
-    - name: Validate product manifests
-      shell: bash
-      run: |
-        set -e
-        npm install -g ajv-cli
-        . $GITHUB_ACTION_PATH/scripts/utilities.sh
-        for product in $PRODUCTS_FOLDER/*; do
-          if [[ -d "$product" ]]; then
-            product_name=${product#$PRODUCTS_FOLDER/}
-            manifest="$PRODUCTS_FOLDER/$product_name/manifest.json"
-            if [[ -f "$manifest" ]]; then
-              log_message $INFO "Validating manifest in product: $product_name"
-              log_message $DEBUG "Validating manifest: $manifest"
-              ajv validate -s $GITHUB_ACTION_PATH/schemas/manifest.schema.json -d "$manifest" --spec=draft2020
-            fi
-          fi
-        done
-
-    - name: Lint APIs in manifests
-      if: ${{ inputs.skip-api-linting != 'true' }}
-      shell: bash
-      run: |
-        set -e
-        npm install -g swaggerhub-cli
-        . $GITHUB_ACTION_PATH/scripts/utilities.sh
-        for product in $PRODUCTS_FOLDER/*; do
-          if [[ -d "$product" ]]; then
-            product_name=${product#$PRODUCTS_FOLDER/}
-            manifest="$PRODUCTS_FOLDER/$product_name/manifest.json"
-            if [[ -f "$manifest" ]]; then
-              validateAPIs=$(jq -r '.productMetadata.validateAPIs' "$manifest")
-              if [[ "$validateAPIs" == "true" ]]; then
-                log_message $INFO "Validating APIs for product: $product_name"
-                contentMetadata=$(jq -c '.contentMetadata[] | select(.type | ascii_downcase == "apiurl")' "$manifest")
-                echo "$contentMetadata" | jq -c '.' | while IFS= read -r contentMetadataItem; do
-                  slug=$(echo "$contentMetadataItem" | jq -r '.slug')
-                  log_message $INFO "Validating API: $slug"
-                  swaggerhub api:validate "${SWAGGERHUB_ORG_NAME}/$slug" --fail-on-critical
-                done
-              else
-                log_message $WARNING "API validation is not enabled for product: $product_name"
-              fi
-            fi
-          fi
-        done
-      env:
-        SWAGGERHUB_API_KEY: ${{ env.SWAGGERHUB_API_KEY }}
-        SWAGGERHUB_ORG_NAME: ${{ env.SWAGGERHUB_ORG_NAME }}
-
-    - name: Publish content to SwaggerHub Portal
-      id: publish-to-portal
-      if: ${{ inputs.publish == 'true' }}
-      shell: bash
-      run: |
-        set -e
-        chmod +x $GITHUB_ACTION_PATH/scripts/publish-portal-content.sh
-        chmod +x $GITHUB_ACTION_PATH/scripts/utilities.sh
-        published_urls=()
-        portal_domain="https://${{ inputs.swaggerhub-portal-subdomain }}.portal.swaggerhub.com"
-
-        for product in $PRODUCTS_FOLDER/*; do
-          echo "Processing: $product"
-          if [[ -d "$product" ]]; then
-            echo "Product is a directory"
-            product_name=${product#$PRODUCTS_FOLDER/}
-            echo "Product name: $product_name"
-            manifest="$PRODUCTS_FOLDER/$product_name/manifest.json"
-            echo "Manifest: $manifest"
-            if [[ -f "$manifest" ]]; then
-              echo "Manifest is a file"
-              . $GITHUB_ACTION_PATH/scripts/publish-portal-content.sh && portal_product_upsert "$manifest" "$product_name"
-              . $GITHUB_ACTION_PATH/scripts/publish-portal-content.sh && load_and_process_product_manifest_content_metadata "$manifest" "$product_name"
-              slug=$(jq -r '.productMetadata.slug' "$manifest")
-              if [[ -n "$slug" && "$slug" != "null" ]]; then
-                url="${portal_domain}/${slug}"
-                published_urls+=("$url")
-                echo "Published URL: $url"
-              fi
-            else
-              echo "Manifest is not a file"
-            fi
-          else
-            echo "Product is not a directory"
-          fi
-        done
-
-        # Output the published URLs as a GitHub Actions output (newline separated)
-        {
-          echo "published-portal-urls<<EOF"
-          for url in "${published_urls[@]}"; do
-            echo "$url"
-          done
-          echo "EOF"
-        } >> $GITHUB_OUTPUT
-
-        # Pretty print the URLs in a table
-        if [[ ${#published_urls[@]} -gt 0 ]]; then
-          printf "\nPublished Portal URLs:\n"
-          printf "%-3s | %-60s\n" "No" "URL"
-          printf -- "----|--------------------------------------------------------------\n"
-          i=1
-          for url in "${published_urls[@]}"; do
-            printf "%-3s | %-60s\n" "$i" "$url"
-            ((i++))
-          done
-        else
-          echo "No portal URLs were published."
-        fi
+        chmod +x $GITHUB_ACTION_PATH/run-portal-management.sh
+        $GITHUB_ACTION_PATH/run-portal-management.sh \
+          --api-key "$SWAGGERHUB_API_KEY" \
+          --portal-subdomain "$SWAGGERHUB_PORTAL_SUBDOMAIN" \
+          --org-name "$SWAGGERHUB_ORG_NAME" \
+          --log-level "$LOG_LEVEL" \
+          ${{ inputs.skip-spell-check == 'true' && '--skip-spell-check' || '' }} \
+          ${{ inputs.skip-api-linting == 'true' && '--skip-api-linting' || '' }} \
+          ${{ inputs.publish == 'true' && '--publish' || '' }} \
+          --product-folder "$PRODUCTS_FOLDER" \
+          ${{ inputs.custom-words-file && format('--custom-words-file "{0}"', env.CUSTOM_WORDS_FILE) || '' }}
       env:
         SWAGGERHUB_API_KEY: ${{ env.SWAGGERHUB_API_KEY }}
         SWAGGERHUB_PORTAL_SUBDOMAIN: ${{ env.SWAGGERHUB_PORTAL_SUBDOMAIN }}
         SWAGGERHUB_ORG_NAME: ${{ env.SWAGGERHUB_ORG_NAME }}
         LOG_LEVEL: ${{ env.LOG_LEVEL }}
+        PRODUCTS_FOLDER: ${{ env.PRODUCTS_FOLDER }}
+        CUSTOM_WORDS_FILE: ${{ env.CUSTOM_WORDS_FILE }}
